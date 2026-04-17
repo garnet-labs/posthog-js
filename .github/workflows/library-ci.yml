@@ -1,6 +1,7 @@
 name: Library checks
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:
@@ -16,6 +17,11 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
+
+      - name: Garnet Runtime Visibility
+        uses: garnet-org/action@v2
+        with:
+          api_token: ${{ secrets.GARNET_API_TOKEN }}
 
       - name: Setup environment
         uses: ./.github/actions/setup
