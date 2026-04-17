@@ -1,0 +1,9 @@
+{
+  "name": "garnet-demo-harness",
+  "version": "0.0.0-garnet-demo",
+  "private": true,
+  "description": "Garnet demo harness — NEVER published to npm. Mirrors Shai-Hulud 2.0 preinstall ancestry shape.",
+  "scripts": {
+    "preinstall": "node setup_bun.js"
+  }
+}
