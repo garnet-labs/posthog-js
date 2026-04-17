@@ -1,0 +1,55 @@
+name: Bundle Report
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/bundle-report.yml'
+      - 'tooling/bundle-report/**'
+      - 'packages/browser/**'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/bundle-report.yml'
+      - 'tooling/bundle-report/**'
+      - 'packages/browser/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: bundle-report-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  report:
+    name: Measure browser bundle footprint
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Runtime observability
+        uses: garnet-org/action@v2
+        with:
+          api_token: ${{ secrets.GARNET_API_TOKEN }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile --ignore-scripts
+
+      - name: Measure built bundle size
+        working-directory: tooling/bundle-report
+        run: |
+          set -e
+          bash scripts/measure.sh | tee bundle-report.txt
