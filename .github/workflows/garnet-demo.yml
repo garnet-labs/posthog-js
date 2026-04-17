@@ -1,0 +1,65 @@
+name: Garnet Demo
+
+# PURPOSE:
+# This is a dedicated workflow for demonstrating Garnet Runtime Visibility's
+# baseline + deviation detection inside PRs. It is NOT part of posthog-js CI.
+# It lives only on garnet-labs/posthog-js (a fork) and will never be merged
+# upstream.
+#
+# The baseline run fetches posthog-js dependencies with pnpm. A PR that adds
+# additional runtime behavior (new network egress, new process spawns, new
+# file reads) will be surfaced by Garnet as a deviation from this baseline.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/garnet-demo.yml'
+      - 'garnet-demo/**'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/garnet-demo.yml'
+      - 'garnet-demo/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: garnet-demo-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    name: Baseline runtime profile
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Garnet Runtime Visibility
+        uses: garnet-org/action@v2
+        with:
+          api_token: ${{ secrets.GARNET_API_TOKEN }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies (baseline network + process behavior)
+        run: pnpm install --no-frozen-lockfile --ignore-scripts
+        # --ignore-scripts keeps the baseline clean and predictable.
+        # A PR that removes this flag, or adds a new step, will show up
+        # as a runtime deviation in Garnet's PR comment.
+
+      - name: List top-level dependencies
+        run: pnpm list --depth 0 || true
