@@ -18,6 +18,11 @@ resolve_mode: permissive
 scopes:
   - scope: repo
     repository: garnet-labs/posthog-js
+  # Release-adjacent workflows (publish, tag, changesets) inherit the base
+  # scope but surface as their own profile so a publish-time deviation is
+  # obviously scoped to "the release path" rather than a perf job.
+  - scope: workflow
+    workflow: Release Healthcheck
 
 # Allow list — learned from main baseline runs. Touching this file requires
 # a code review, which is what makes "what the CI can talk to" a versioned,
