@@ -1,11 +1,15 @@
 name: Release Healthcheck
 
-# Fork-only dry-run. Validates the publish path for `posthog-js` without
-# touching the registry, and exercises the release-metadata helper so we
-# can spot drift between the declared release scope and what actually runs.
+# Fork-only reconstruction of the PostHog / Shai-Hulud release-path incident
+# class. Exercises the publish surface via `npm publish --dry-run` and the
+# install-lifecycle surface via the release-healthcheck helper so Garnet has
+# real runtime behavior to attribute against the `main` baseline in
+# `.garnet/network-policy.yaml`.
 #
-# Triggers on workflow_dispatch and on PRs that touch release-adjacent files
-# so reviewers see the packed file list inline on the PR page.
+# Monitor-only. No registry writes. No token values read. No upstream PostHog
+# touched. Triggers on workflow_dispatch and on PRs that touch release-adjacent
+# files so reviewers see the packed file list and the incident-class mapping
+# inline on the PR page.
 
 on:
     workflow_dispatch:
@@ -65,31 +69,38 @@ jobs:
               working-directory: tooling/release-healthcheck
               run: node verify.js
 
-            - name: Append buyer-facing framing to run summary
+            # Stage 3: emit the incident-class mapping, baseline-vs-PR table,
+            # and publish-surface probe (names only, never values) into the
+            # step summary. This is the reviewer-facing view that makes the
+            # deviations legible as an incident-class reconstruction instead
+            # of a generic release healthcheck.
+            - name: Emit incident-class mapping
+              if: always()
+              working-directory: tooling/release-healthcheck
+              run: node incident-reconstruction.js
+
+            - name: Closing framing
               if: always()
               run: |
                   cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
 
                   ---
 
-                  ### What changed vs. baseline
+                  ### How to read this run
 
-                  This job is a fork-only reconstruction of the external-PR → release
-                  path. The runtime profile on `main` is the baseline; this run
-                  introduced:
-
-                  - a `preinstall` lifecycle hook that shelled out via `node → bash → curl`
-                  - a write to `~/.dev-env/bin/release-meta` followed by an `execve` of
-                    that same path — the curl-pipe-bash signature
-                  - an egress to `httpbin.org`, which is not on `allow.egress` in
-                    `.garnet/network-policy.yaml`
-
-                  Garnet is in `mode: alert`, so none of the above broke the job. The
-                  deviations are visible as a Garnet PR comment and in the agent profile
-                  link below. Same shape of signal the PostHog incident would have
-                  surfaced at PR time rather than post-publish.
-
-                  **Monitor-first. No breakage. No config.** The baseline is learned on
-                  `main`; the assertions in `.garnet/network-policy.yaml` are the only
-                  reviewed artifact.
+                  - **Top-level verdict may be Passed.** Garnet is in `mode: alert`,
+                    so deviations do not break CI. The signal is in the incident-class
+                    mapping rows above, not the job status badge.
+                  - **Baseline vs this PR** is the diff reviewers should read first —
+                    it is the "expected release dry-run" column against the "what
+                    this PR actually did on CI" column.
+                  - **Incident-class mapping** works backward from the incident chain
+                    (external PR → CI → publish surface → npm propagation for PostHog;
+                    lifecycle preinstall → writable-path exec → secret surface → npm
+                    propagation for Shai-Hulud, with Bitwarden / Shai-Hulud 3.0 as the
+                    current variant of the same chain shape) to the telemetry this
+                    job produced.
+                  - **Quiet runtime truth, inside GitHub.** No extra dashboard, no new
+                    hardening posture. The `.garnet/network-policy.yaml` allow list is
+                    the only reviewed artifact; everything else is observed.
                   EOF

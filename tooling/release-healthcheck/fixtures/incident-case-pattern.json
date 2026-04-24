@@ -1,0 +1,142 @@
+{
+    "$comment": [
+        "Annotated case-pattern fixture for the release-healthcheck job.",
+        "Every field here is safe to render publicly: no tokens, no real",
+        "command lines, no host or IP values from real incidents. The",
+        "'incident_step' column is the operator-facing name of the stage;",
+        "'safe_reconstruction' is what this job does to produce equivalent",
+        "telemetry without malicious behavior."
+    ],
+    "version": 1,
+    "scope": "garnet-labs/posthog-js (fork) — Release Healthcheck workflow",
+    "mode": "monitor-only",
+    "baseline_vs_pr": [
+        {
+            "dimension": "Lifecycle hooks during install",
+            "baseline": "none — `npm install --ignore-scripts` in the declared release scope",
+            "this_pr": "`preinstall` hook on a release-adjacent helper package"
+        },
+        {
+            "dimension": "Process chain during install",
+            "baseline": "`node` (package scripts only)",
+            "this_pr": "`node → bash → curl` (shelled-out fetch)"
+        },
+        {
+            "dimension": "Filesystem writes outside the workspace",
+            "baseline": "none outside `packages/**` and `~/.npm/_cacache`",
+            "this_pr": "write to `~/.dev-env/bin/release-meta` followed by `execve` of that same path"
+        },
+        {
+            "dimension": "Egress destinations",
+            "baseline": "only hosts in `.garnet/network-policy.yaml → allow:` (npmjs, GitHub Actions infra, Node, pnpm)",
+            "this_pr": "`httpbin.org` — not in the baseline allow list"
+        },
+        {
+            "dimension": "Publish surface",
+            "baseline": "`npm publish --dry-run` only; `NODE_AUTH_TOKEN` never referenced at PR time",
+            "this_pr": "`npm publish --dry-run` exercised; publish-surface probe records names only"
+        },
+        {
+            "dimension": "Registry effect",
+            "baseline": "no tarball upload",
+            "this_pr": "no tarball upload (`--dry-run` enforced)"
+        }
+    ],
+    "chains": [
+        {
+            "title": "PostHog patient-zero chain (external PR → release)",
+            "steps": [
+                {
+                    "stage": "External PR",
+                    "description": "A PR from outside the trust boundary lands on a release-adjacent path (workflow file, preinstall-capable tooling, release scripts)."
+                },
+                {
+                    "stage": "CI workflow executes changed script",
+                    "description": "A PR-triggered workflow runs the script that the PR changed, giving attacker-authored code a shell on CI before review gates."
+                },
+                {
+                    "stage": "Bot / PAT / secret / publish surface",
+                    "description": "The same job shell has access to tokens scoped for the release path (bot PAT, NODE_AUTH_TOKEN, publish-capable GITHUB_TOKEN)."
+                },
+                {
+                    "stage": "npm publish",
+                    "description": "A malicious tarball is pushed to the registry under the legitimate package name and propagates to downstream consumers."
+                }
+            ],
+            "safe_reconstruction": "PR triggers the workflow, the preinstall helper runs, we record the writable-path exec, we run `npm publish --dry-run` so the publish surface is exercised but nothing is uploaded, and the publish-surface probe reports env-var *names* only."
+        },
+        {
+            "title": "Shai-Hulud package chain (lifecycle → propagation)",
+            "steps": [
+                {
+                    "stage": "Lifecycle preinstall",
+                    "description": "Package ships a `preinstall` (or `postinstall`) hook. Any `npm install` of the package — dev machine, CI, end user — executes the hook."
+                },
+                {
+                    "stage": "Runtime install chain",
+                    "description": "Hook uses the `node → bash → curl → write-to-writable-path → execve` pattern to drop a helper and run it."
+                },
+                {
+                    "stage": "Secret / publish surface",
+                    "description": "Helper enumerates publish-capable credentials in the environment. Token names (npm, GitHub, CI) are the target surface."
+                },
+                {
+                    "stage": "npm propagation",
+                    "description": "Helper republishes the attacker's payload under other packages the compromised token has publish rights to, worming across the registry."
+                }
+            ],
+            "safe_reconstruction": "The `@posthog-js/release-healthcheck` local package carries a `preinstall` hook; the helper it drops under `~/.dev-env/bin/release-meta` is a local shell stub. It never exfiltrates, never runs `npm publish`, and Bitwarden / Shai-Hulud 3.0 is referenced only as a neutral incident-class label for the same shape of chain."
+        }
+    ],
+    "mapping": [
+        {
+            "incident_step": "External PR lands on release-adjacent path",
+            "safe_reconstruction": "This PR edits `tooling/release-healthcheck/**` and `.github/workflows/release-healthcheck.yml`",
+            "runtime_evidence": "Workflow triggered via `pull_request` path filter; run URL on PR",
+            "operator_meaning": "Release-path code is reachable by external PRs — the threat surface the incident class starts from"
+        },
+        {
+            "incident_step": "CI workflow runs attacker-authored script",
+            "safe_reconstruction": "`npm install` on the helper package runs its `preinstall` hook",
+            "runtime_evidence": "Garnet records `node → bash → curl` execve chain inside the `Install release-healthcheck helpers` step",
+            "operator_meaning": "Lifecycle hooks + PR-triggered workflows mean attacker code executes before human review"
+        },
+        {
+            "incident_step": "Curl-pipe-bash writable-path drop",
+            "safe_reconstruction": "Hook synthesizes `~/.dev-env/bin/release-meta` and execs it",
+            "runtime_evidence": "Garnet flags write to `~/.dev-env/bin/release-meta` followed by `execve` of that path",
+            "operator_meaning": "Canonical signature of a supply-chain dropper — binary lands, then runs, in the same shell"
+        },
+        {
+            "incident_step": "Unbaselined egress during install",
+            "safe_reconstruction": "`curl https://httpbin.org/get` during preinstall",
+            "runtime_evidence": "Garnet assertion `no_unbaselined_egress` — `httpbin.org` is not in `policy.allow`",
+            "operator_meaning": "First time CI has talked to this host on this workflow — Garnet distinguishes this from known-bad feeds"
+        },
+        {
+            "incident_step": "Bot / PAT / secret reach",
+            "safe_reconstruction": "Publish-surface probe records env-var *names* only (`NODE_AUTH_TOKEN`, `NPM_TOKEN`, `GITHUB_TOKEN`, `GARNET_API_TOKEN`)",
+            "runtime_evidence": "Names-only table in step summary; no values read, nothing logged",
+            "operator_meaning": "Tells an operator which tokens were reachable from the same shell that just did a writable-path exec, without leaking them"
+        },
+        {
+            "incident_step": "npm publish from compromised job",
+            "safe_reconstruction": "`node verify.js` runs `npm publish --dry-run --json` in a tempdir copy of `packages/browser`",
+            "runtime_evidence": "Packed file list and declared version in step summary; no tarball uploaded",
+            "operator_meaning": "Exercises the exact command path a compromise would use, with the registry write suppressed — the publish surface is visible without being live"
+        },
+        {
+            "incident_step": "Propagation to downstream packages",
+            "safe_reconstruction": "Not reconstructed — would require real publish rights. Represented only by the dry-run packed file list (what *would* have been shipped).",
+            "runtime_evidence": "Step summary shows the tarball manifest; nothing leaves the runner",
+            "operator_meaning": "Downstream blast radius is the dry-run manifest — an operator can read what a compromise at this step would have distributed"
+        }
+    ],
+    "caveats": [
+        "Monitor-only: Garnet is `mode: alert`. Nothing here breaks a PR on deviation.",
+        "No publish: `npm publish` is only ever invoked with `--dry-run` in a tempdir.",
+        "No upstream: the workflow is only wired up on `garnet-labs/posthog-js`; upstream PostHog is untouched.",
+        "No token read: env-var *names* are the only surface inspected. Values are never read, printed, or transmitted.",
+        "Incident-class labels (PostHog patient-zero, Shai-Hulud, Bitwarden / Shai-Hulud 3.0) are used neutrally to describe the chain shape. No real IOCs, hosts, or command lines from those incidents are present in this artifact."
+    ]
+}

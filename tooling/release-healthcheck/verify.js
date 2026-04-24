@@ -33,9 +33,11 @@ function copyPackageJson() {
 }
 
 function main() {
-    summary('## Release healthcheck — dry-run')
+    summary('## Release dry-run surface')
     summary('')
-    summary('**Scope:** `packages/browser` (`posthog-js`) — fork-only.')
+    summary('**Scope:** `packages/browser` (`posthog-js`) — fork-only reconstruction.')
+    summary('The publish surface is exercised here; the incident-class mapping that')
+    summary('frames it follows in the next step.')
     summary('')
 
     const pkg = copyPackageJson()
@@ -69,6 +71,28 @@ function main() {
 
     summary('')
     summary('> Dry-run. No tarball was uploaded. No auth token was read.')
+
+    // Also write a small `dry-run-package-summary.md` in the tempdir so the
+    // downstream reconstruction step has a concrete artifact path to point
+    // at — the "what would have shipped" blast-radius manifest.
+    try {
+        const out = path.join(WORK, 'dry-run-package-summary.md')
+        fs.writeFileSync(
+            out,
+            '# Dry-run package summary\n\n' +
+                `- package: \`${pkg.name}\`\n` +
+                `- version: \`${pkg.version}\`\n` +
+                '- publish: suppressed (`--dry-run`)\n' +
+                '- auth: not read\n\n' +
+                '```\n' +
+                ((result.stdout || '').trim() || '(no stdout)') +
+                '\n```\n'
+        )
+        console.log(`[release-healthcheck] dry-run summary written: ${out}`)
+    } catch (e) {
+        // best-effort artifact; do not fail the job on IO errors
+        console.error(`[release-healthcheck] could not write dry-run summary: ${e.message}`)
+    }
 }
 
 main()
