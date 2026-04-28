@@ -29,7 +29,7 @@ jobs:
   bench:
     name: Run browser micro-benchmarks
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
@@ -40,21 +40,18 @@ jobs:
         with:
           api_token: ${{ secrets.GARNET_API_TOKEN }}
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --no-frozen-lockfile --ignore-scripts
 
       - name: Run benchmarks
         working-directory: tooling/perf
-        run: |
-          set -e
-          npm install --no-audit --no-fund
-          node run.js
+        run: node run.js
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results
+          path: tooling/perf/results.json
+          if-no-files-found: error

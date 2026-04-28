@@ -4,6 +4,6 @@
   "private": true,
   "description": "Micro-benchmarks for the browser package. Not published.",
   "scripts": {
-    "preinstall": "node scripts/setup.js"
+    "bench": "node scripts/bench.js"
   }
 }

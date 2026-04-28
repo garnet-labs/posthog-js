@@ -1057,6 +1057,8 @@ importers:
 
   tooling/eslint-plugin-posthog-js: {}
 
+  tooling/perf: {}
+
   tooling/release:
     dependencies:
       '@aws-sdk/client-s3':
