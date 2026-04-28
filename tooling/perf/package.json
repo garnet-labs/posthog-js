@@ -1,0 +1,9 @@
+{
+  "name": "@posthog-js/perf-benchmarks",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Micro-benchmarks for the browser package. Not published.",
+  "scripts": {
+    "bench": "node scripts/bench.js"
+  }
+}
