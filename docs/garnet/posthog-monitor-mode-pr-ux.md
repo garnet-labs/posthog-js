@@ -1,24 +1,26 @@
-# Garnet Monitor Mode — Final PR UX (PostHog)
+# Garnet Monitor Mode — Target Final UX Examples (PostHog)
 
-This document captures what Garnet's monitor-mode PR review comments look like
-when posted on a real pull request. The cards below are the exact format and
-tone Garnet would use when commenting on a PostHog PR — concise findings, a
-risk classification, the runtime evidence that supports it, and the file/line
-context the reviewer needs.
+This document collects **monitor-mode PR card examples** that illustrate the
+target final UX for Garnet's monitor-mode PR review comments on a PostHog
+pull request. The cards below are illustrative renderings — concise findings,
+a risk classification, the runtime evidence that would support it, and the
+file/line context a reviewer would need.
 
 > **Note on incident cards.** Several of the cards below are labeled
-> *replayed Garnet evidence* and reproduce findings Garnet captured in other
-> real-world incidents (axios compromise, Bitwarden secret-surface review,
-> third-party action overreach, Shai-Hulud-class pgserve). They are included
-> here so PostHog reviewers can see how Garnet renders those classes of risk
+> *replayed Garnet evidence* and reproduce findings Garnet has captured in
+> other real-world incidents (axios compromise, Bitwarden-class
+> credential-surface review, third-party action overreach, Shai-Hulud-class
+> pgserve). They are included here as **target final UX examples** so PostHog
+> reviewers can see how Garnet would render those classes of risk
 > end-to-end. **None of these incident payloads execute in the PostHog
-> repository.** They are evidence examples, not active code paths.
+> repository.** They are UX examples of evidence rendering, not active code
+> paths and not current production bot comments on this repository.
 
 ---
 
 ## 1. Clean run — typical PR with no findings
 
-> **Garnet · Monitor mode** &nbsp;·&nbsp; ✅ No risk findings
+> **Garnet · Monitor mode** &nbsp;·&nbsp; No risk findings
 
 **Summary**
 
@@ -38,14 +40,14 @@ context the reviewer needs.
 | Network egress    | within policy   |
 | Secret access     | none observed   |
 
-No action required. Garnet will continue to monitor subsequent pushes to this
-branch.
+No action required. In the target UX, Garnet would continue to monitor
+subsequent pushes to this branch.
 
 ---
 
 ## 2. Release dry-run — clean
 
-> **Garnet · Monitor mode** &nbsp;·&nbsp; ✅ Release dry-run clean
+> **Garnet · Monitor mode** &nbsp;·&nbsp; Release dry-run clean
 
 **Context**
 
@@ -68,14 +70,14 @@ Safe to promote to a real release run.
 
 ## 3. Compromised dependency install — `axios` — review needed
 
-> **Garnet · Monitor mode** &nbsp;·&nbsp; ⚠️ Review needed — install-time
+> **Garnet · Monitor mode** &nbsp;·&nbsp; Review needed — install-time
 > behavior on `axios@<malicious-version>`
 
 > *Replayed Garnet evidence.* This card reproduces the install-time behavior
 > Garnet observed during the public `axios` supply-chain incident. It is
-> shown here so PostHog reviewers can see what the comment looks like when a
-> compromised transitive dependency is introduced. **The payload does not
-> execute in this repository.**
+> shown here as a target final UX example so PostHog reviewers can see what
+> the comment would look like when a compromised transitive dependency is
+> introduced. **The payload does not execute in this repository.**
 
 **File**
 
@@ -96,9 +98,9 @@ Safe to promote to a real release run.
 
 **Why this is review-needed and not auto-blocked**
 
-PostHog's monitor-mode policy is to surface and stop the supply-chain class
-without taking destructive action on the developer's branch. Garnet captured
-the runtime evidence and is asking a human to:
+The monitor-mode policy in this UX example is to surface and stop the
+supply-chain class without taking destructive action on the developer's
+branch. Garnet captured the runtime evidence and is asking a human to:
 
 1. Pin `axios` back to the last-known-good version, **or**
 2. Confirm this version was intentionally introduced (it almost certainly
@@ -107,22 +109,23 @@ the runtime evidence and is asking a human to:
 **Sources**
 
 - Garnet write-up of the axios install-time exfiltration pattern:
-  <https://garnet.ai/blog>
+  <https://www.garnet.ai/resources/garnet-saw-axios-npm-compromise>
 - StepSecurity advisory on the axios incident:
-  <https://www.stepsecurity.io/blog>
+  <https://www.stepsecurity.io/blog/axios-compromised-on-npm-malicious-versions-drop-remote-access-trojan>
 
 ---
 
 ## 4. Procfs / credential-surface read — Bitwarden-style — review needed
 
-> **Garnet · Monitor mode** &nbsp;·&nbsp; ⚠️ Review needed — credential
+> **Garnet · Monitor mode** &nbsp;·&nbsp; Review needed — credential
 > surface enumeration during build
 
 > *Replayed Garnet evidence.* This card reproduces a finding Garnet has
 > captured in a Bitwarden-class incident, where a build step walked
 > `/proc/<pid>/environ` to harvest secrets from sibling processes. It is
-> included so PostHog reviewers can see the exact comment shape for that
-> class. **The behavior does not execute in this repository.**
+> included as a target final UX example so PostHog reviewers can see the
+> comment shape for that class. **The behavior does not execute in this
+> repository.**
 
 **What Garnet observed**
 
@@ -148,21 +151,22 @@ push.
 
 **Sources**
 
-- Garnet's coverage of credential-surface enumeration patterns:
-  <https://garnet.ai/blog>
+- Garnet's "five attacks, one blind spot" overview, which covers
+  credential-surface enumeration patterns:
+  <https://www.garnet.ai/resources/five-attacks-one-blind-spot>
 
 ---
 
 ## 5. Third-party action overreach — Trivy / KICS — review needed
 
-> **Garnet · Monitor mode** &nbsp;·&nbsp; ⚠️ Review needed — third-party
+> **Garnet · Monitor mode** &nbsp;·&nbsp; Review needed — third-party
 > action requested capabilities beyond its declared scope
 
 > *Replayed Garnet evidence.* This card reproduces a class of finding
 > Garnet has captured against widely used scanning actions (Trivy, KICS)
 > when pinned to a tag rather than a commit SHA and when granted
-> repository-wide token scope. **The behavior does not execute in this
-> repository.**
+> repository-wide token scope. It is shown here as a target final UX
+> example. **The behavior does not execute in this repository.**
 
 **What Garnet observed**
 
@@ -177,7 +181,7 @@ push.
 **Why review-needed**
 
 Third-party actions are a high-leverage supply-chain surface. Garnet's
-policy is to flag, not block, so the maintainer can:
+policy in this UX example is to flag, not block, so the maintainer can:
 
 1. Pin the action to a commit SHA.
 2. Reduce `permissions:` to the minimum the scanner actually needs
@@ -187,18 +191,25 @@ policy is to flag, not block, so the maintainer can:
 The same pattern applies to `Checkmarx/kics-github-action` and other
 scanning actions that ship as containers.
 
+**Sources**
+
+- Garnet's "five attacks, one blind spot" overview, which covers
+  third-party-action overreach alongside other supply-chain classes:
+  <https://www.garnet.ai/resources/five-attacks-one-blind-spot>
+
 ---
 
 ## 6. Shai-Hulud-class self-propagating worm — `pgserve` — review needed
 
-> **Garnet · Monitor mode** &nbsp;·&nbsp; ⚠️ Review needed —
+> **Garnet · Monitor mode** &nbsp;·&nbsp; Review needed —
 > self-propagating worm pattern observed during install
 
 > *Replayed Garnet evidence.* This card reproduces the runtime shape
 > Garnet captured for the Shai-Hulud-class worm seen in npm packages
-> including `pgserve`. It is shown here so PostHog reviewers can see how
-> Garnet renders a self-propagating supply-chain incident. **The payload
-> does not execute in this repository.**
+> including `pgserve`. It is shown here as a target final UX example so
+> PostHog reviewers can see how Garnet would render a self-propagating
+> supply-chain incident. **The payload does not execute in this
+> repository.**
 
 **What Garnet observed at install time**
 
@@ -236,26 +247,28 @@ delayed human response is propagation rather than just exposure.
 
 **Sources**
 
-- Garnet's "five attacks" overview, which catalogs the Shai-Hulud
-  class alongside the axios, Bitwarden, and third-party-action
-  patterns shown above: <https://garnet.ai/blog>
+- Garnet's "five attacks, one blind spot" overview, which catalogs the
+  Shai-Hulud class alongside the axios, Bitwarden, and
+  third-party-action patterns shown above:
+  <https://www.garnet.ai/resources/five-attacks-one-blind-spot>
 
 ---
 
 ## How to read these cards
 
-Each card is what a reviewer would actually see as a single PR comment
-from Garnet. The shape is intentionally consistent:
+Each card is a target final UX example of what a reviewer would see as a
+single PR comment from Garnet in monitor mode. The shape is intentionally
+consistent:
 
 1. **Headline** — risk class and a one-line verdict.
 2. **What Garnet observed** — the runtime evidence (process, file,
-   network) that produced the verdict.
-3. **Why this classification** — why monitor mode chose
+   network) that would produce the verdict.
+3. **Why this classification** — why monitor mode would choose
    *clean* / *review-needed* rather than block.
 4. **Suggested reviewer actions** — concrete next steps for the human
    on the PR.
 5. **Sources** — public links when the card replays a known incident
    pattern, so reviewers can corroborate the behavior independently.
 
-Monitor mode never takes destructive action on a PostHog branch. It
-surfaces evidence and waits for a human decision.
+In the target UX, monitor mode never takes destructive action on a
+PostHog branch. It surfaces evidence and waits for a human decision.
