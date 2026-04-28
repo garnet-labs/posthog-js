@@ -37,18 +37,22 @@ jobs:
         runs-on: ubuntu-22.04
         timeout-minutes: 10
         steps:
-            - uses: actions/checkout@v6
+            # actions/checkout@v6.0.2
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
             # Garnet runs first so every execve / egress / write in the rest
             # of the job is recorded against .garnet/network-policy.yaml.
-            # Monitor-only here (mode: alert).
+            # Monitor-only here (mode: alert) — the action does not gate the
+            # PR; runtime observations surface as alerts.
+            # garnet-org/action@v2
             - name: Garnet
-              uses: garnet-org/action@v2
+              uses: garnet-org/action@9e819143e63d6dda04bca2e90ac85e3cf0e5289d
               with:
                   api_token: ${{ secrets.GARNET_API_TOKEN }}
 
+            # actions/setup-node@v4.4.0
             - name: Setup Node.js
-              uses: actions/setup-node@v4
+              uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
               with:
                   node-version: 22
 
