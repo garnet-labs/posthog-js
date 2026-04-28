@@ -23,26 +23,11 @@ jobs:
         with:
           api_token: ${{ secrets.GARNET_API_TOKEN }}
 
-      # This branch is a controlled Garnet monitor-mode demo intended to
-      # surface run-level runtime evidence; it is not the product
-      # baseline-diff UX. Clean runs on main remain quiet.
-      - name: Runtime evidence demo (Garnet)
-        shell: bash
-        run: |
-          set +e
-          tmpdir="$(mktemp -d)"
-          # Read runtime/process state into local temp files only.
-          # Output is intentionally not echoed to logs and never leaves the runner.
-          cat /proc/self/environ      > "$tmpdir/environ.bin"     2>/dev/null
-          cat /proc/1/cmdline         > "$tmpdir/pid1_cmdline.bin" 2>/dev/null
-          cat /proc/self/status       > "$tmpdir/self_status.txt"  2>/dev/null
-          cat /proc/self/mountinfo    > "$tmpdir/mountinfo.txt"    2>/dev/null
-          # Report only sizes, never contents.
-          wc -c "$tmpdir"/* 2>/dev/null | tail -n +1 >/dev/null
-          exit 0
-
       - name: Setup environment
         uses: ./.github/actions/setup
+
+      - name: Prepare package test fixture
+        run: node scripts/ci-test-fixture-prep.mjs
 
       - run: pnpm test:unit
 
