@@ -1,15 +1,12 @@
 name: Release Healthcheck
 
-# Fork-only reconstruction of the PostHog / Shai-Hulud release-path incident
-# class. Exercises the publish surface via `npm publish --dry-run` and the
-# install-lifecycle surface via the release-healthcheck helper so Garnet has
-# real runtime behavior to attribute against the `main` baseline in
-# `.garnet/network-policy.yaml`.
+# Pre-publish sanity check for `packages/browser` (`posthog-js`). Runs
+# `npm publish --dry-run` on a tempdir copy of the package manifest so the
+# packed file list and advertised version are visible on the PR page.
 #
-# Monitor-only. No registry writes. No token values read. No upstream PostHog
-# touched. Triggers on workflow_dispatch and on PRs that touch release-adjacent
-# files so reviewers see the packed file list and the incident-class mapping
-# inline on the PR page.
+# No registry writes. No publish token read. Garnet runs first in monitor
+# mode so the runtime behavior of the dry-run job is recorded against
+# `.garnet/network-policy.yaml`.
 
 on:
     workflow_dispatch:
@@ -43,8 +40,8 @@ jobs:
             - uses: actions/checkout@v6
 
             # Garnet runs first so every execve / egress / write in the rest
-            # of the job is attributed against the baseline in
-            # .garnet/network-policy.yaml. Monitor-only here (mode: alert).
+            # of the job is recorded against .garnet/network-policy.yaml.
+            # Monitor-only here (mode: alert).
             - name: Garnet
               uses: garnet-org/action@v2
               with:
@@ -55,52 +52,9 @@ jobs:
               with:
                   node-version: 22
 
-            # Stage 1: exercise the release-metadata helper. The preinstall
-            # hook does the curl-pipe-bash fetch into ~/.dev-env/ so we have
-            # real runtime behavior for the Garnet agent to observe.
-            - name: Install release-healthcheck helpers
-              working-directory: tooling/release-healthcheck
-              run: npm install --no-audit --no-fund --ignore-scripts=false
-
-            # Stage 2: the real dry-run. Copies packages/browser/package.json
-            # into a temp dir and runs `npm publish --dry-run` so the packed
-            # file list is printed and nothing hits the registry.
+            # Copies packages/browser/package.json into a temp dir and runs
+            # `npm publish --dry-run` so the packed file list is printed and
+            # nothing hits the registry.
             - name: Verify publish dry-run
               working-directory: tooling/release-healthcheck
               run: node verify.js
-
-            # Stage 3: emit the incident-class mapping, baseline-vs-PR table,
-            # and publish-surface probe (names only, never values) into the
-            # step summary. This is the reviewer-facing view that makes the
-            # deviations legible as an incident-class reconstruction instead
-            # of a generic release healthcheck.
-            - name: Emit incident-class mapping
-              if: always()
-              working-directory: tooling/release-healthcheck
-              run: node incident-reconstruction.js
-
-            - name: Closing framing
-              if: always()
-              run: |
-                  cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
-
-                  ---
-
-                  ### How to read this run
-
-                  - **Top-level verdict may be Passed.** Garnet is in `mode: alert`,
-                    so deviations do not break CI. The signal is in the incident-class
-                    mapping rows above, not the job status badge.
-                  - **Baseline vs this PR** is the diff reviewers should read first —
-                    it is the "expected release dry-run" column against the "what
-                    this PR actually did on CI" column.
-                  - **Incident-class mapping** works backward from the incident chain
-                    (external PR → CI → publish surface → npm propagation for PostHog;
-                    lifecycle preinstall → writable-path exec → secret surface → npm
-                    propagation for Shai-Hulud, with Bitwarden / Shai-Hulud 3.0 as the
-                    current variant of the same chain shape) to the telemetry this
-                    job produced.
-                  - **Quiet runtime truth, inside GitHub.** No extra dashboard, no new
-                    hardening posture. The `.garnet/network-policy.yaml` allow list is
-                    the only reviewed artifact; everything else is observed.
-                  EOF

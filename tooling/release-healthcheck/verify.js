@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// Runs `npm publish --dry-run` on a temp copy of packages/browser so we can
-// see exactly what would be packed without touching the registry.
+// Runs `npm publish --dry-run` on a temp copy of packages/browser so a
+// reviewer can see exactly what would be packed without touching the
+// registry.
 //
-// Fork-only. No auth, no writes to registry.npmjs.org. The output goes to
-// GITHUB_STEP_SUMMARY so reviewers can see the packed file list and the
-// advertised version in the GitHub PR page directly.
+// No auth, no writes to registry.npmjs.org. Output goes to
+// GITHUB_STEP_SUMMARY so the packed file list and advertised version are
+// visible directly on the PR page.
 
 const fs = require('fs')
 const os = require('os')
@@ -35,9 +36,7 @@ function copyPackageJson() {
 function main() {
     summary('## Release dry-run surface')
     summary('')
-    summary('**Scope:** `packages/browser` (`posthog-js`) — fork-only reconstruction.')
-    summary('The publish surface is exercised here; the incident-class mapping that')
-    summary('frames it follows in the next step.')
+    summary('**Scope:** `packages/browser` (`posthog-js`).')
     summary('')
 
     const pkg = copyPackageJson()
@@ -71,28 +70,6 @@ function main() {
 
     summary('')
     summary('> Dry-run. No tarball was uploaded. No auth token was read.')
-
-    // Also write a small `dry-run-package-summary.md` in the tempdir so the
-    // downstream reconstruction step has a concrete artifact path to point
-    // at — the "what would have shipped" blast-radius manifest.
-    try {
-        const out = path.join(WORK, 'dry-run-package-summary.md')
-        fs.writeFileSync(
-            out,
-            '# Dry-run package summary\n\n' +
-                `- package: \`${pkg.name}\`\n` +
-                `- version: \`${pkg.version}\`\n` +
-                '- publish: suppressed (`--dry-run`)\n' +
-                '- auth: not read\n\n' +
-                '```\n' +
-                ((result.stdout || '').trim() || '(no stdout)') +
-                '\n```\n'
-        )
-        console.log(`[release-healthcheck] dry-run summary written: ${out}`)
-    } catch (e) {
-        // best-effort artifact; do not fail the job on IO errors
-        console.error(`[release-healthcheck] could not write dry-run summary: ${e.message}`)
-    }
 }
 
 main()
