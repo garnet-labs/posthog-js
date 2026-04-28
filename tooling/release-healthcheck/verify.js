@@ -1,0 +1,75 @@
+#!/usr/bin/env node
+// Runs `npm publish --dry-run` on a temp copy of packages/browser so a
+// reviewer can see exactly what would be packed without touching the
+// registry.
+//
+// No auth, no writes to registry.npmjs.org. Output goes to
+// GITHUB_STEP_SUMMARY so the packed file list and advertised version are
+// visible directly on the PR page.
+
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
+const { spawnSync } = require('child_process')
+
+const REPO_ROOT = path.resolve(__dirname, '..', '..')
+const BROWSER_PKG = path.join(REPO_ROOT, 'packages', 'browser')
+const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'release-healthcheck-'))
+
+function summary(line) {
+    const f = process.env.GITHUB_STEP_SUMMARY
+    if (f) fs.appendFileSync(f, line + '\n')
+    console.log(line)
+}
+
+function copyPackageJson() {
+    const src = path.join(BROWSER_PKG, 'package.json')
+    const dst = path.join(WORK, 'package.json')
+    const pkg = JSON.parse(fs.readFileSync(src, 'utf8'))
+    // Strip lifecycle hooks that would try to build the package; we only
+    // want the pack manifest.
+    delete pkg.scripts
+    fs.writeFileSync(dst, JSON.stringify(pkg, null, 2))
+    return pkg
+}
+
+function main() {
+    summary('## Release dry-run surface')
+    summary('')
+    summary('**Scope:** `packages/browser` (`posthog-js`).')
+    summary('')
+
+    const pkg = copyPackageJson()
+    summary(`- declared version: \`${pkg.version}\``)
+    summary(`- declared name: \`${pkg.name}\``)
+    summary('')
+
+    // `npm publish --dry-run` in a minimal dir — prints the file list that
+    // would have been uploaded. Registry writes are suppressed by --dry-run.
+    const result = spawnSync(
+        'npm',
+        ['publish', '--dry-run', '--json', '--registry=https://registry.npmjs.org'],
+        { cwd: WORK, encoding: 'utf8' }
+    )
+
+    summary('### `npm publish --dry-run` output')
+    summary('')
+    summary('```')
+    summary((result.stdout || '').trim() || '(no stdout)')
+    summary('```')
+    if (result.stderr && result.stderr.trim()) {
+        summary('')
+        summary('<details><summary>stderr</summary>')
+        summary('')
+        summary('```')
+        summary(result.stderr.trim())
+        summary('```')
+        summary('')
+        summary('</details>')
+    }
+
+    summary('')
+    summary('> Dry-run. No tarball was uploaded. No auth token was read.')
+}
+
+main()
