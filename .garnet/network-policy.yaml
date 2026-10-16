@@ -1,17 +1,17 @@
-# Garnet network policy for garnet-labs/posthog-js
+# Garnet policy for garnet-labs/posthog-js
 #
-# Same shape as the merged policy the Garnet action already fetches at the
-# start of every run. Checking it into the repo gives us:
-#   (1) an auditable diff when the allowlist changes
-#   (2) a default-allow, alert-on-deviation posture without handwritten rules
+# Same shape as the merged policy the Garnet action already fetches per run.
+# Checking it into the repo gives us:
+#   1. an auditable diff when the allowlist changes
+#   2. a default-allow, alert-on-deviation posture without handwritten rules
+#   3. one suppression lane shared across every deviation kind
 #
-# The allow list is seeded from the last N successful runs of each workflow on
-# `main`. Garnet's baseline learner runs nightly and opens a PR against this
-# file when new destinations stabilize. A human reviews and merges.
-# Deviation alerts fire against whatever is merged here.
+# The allow lists below are seeded from the last N successful runs of each
+# workflow on `main`. Garnet's baseline learner opens a PR against this file
+# when new entries stabilize; a human reviews and merges.
 
 version: 1
-mode: alert                # alert | enforce | both   (start with alert)
+mode: alert                # alert | enforce | both
 policy: allow              # default action for unmatched destinations
 resolve_mode: permissive
 
@@ -19,43 +19,122 @@ scopes:
   - scope: repo
     repository: garnet-labs/posthog-js
 
-# Allow list — learned from main baseline runs. Touching this file requires
-# a code review, which is what makes "what the CI can talk to" a versioned,
-# reviewed artifact rather than a dashboard setting.
-allow:
-  # Package registries
-  - registry.npmjs.org
-  - objects.githubusercontent.com
-  - release-assets.githubusercontent.com
-  # GitHub Actions infrastructure
-  - github.com
-  - api.github.com
-  - "*.githubapp.com"
-  - "*.actions.githubusercontent.com"
-  - "*.blob.core.windows.net"
-  - "*.trafficmanager.net"
-  # Node / pnpm
-  - nodejs.org
-  - "*.pnpm.io"
+# ---------------------------------------------------------------------------
+# Baselines (learner-populated)
+# ---------------------------------------------------------------------------
 
-# Per-workflow overrides live here when a specific workflow needs something
-# the rest of the repo shouldn't. Empty for now.
-workflows: {}
+allow:
+  # Egress destinations observed on main. Same list the existing network
+  # policy engine already understands.
+  egress:
+    - registry.npmjs.org
+    - objects.githubusercontent.com
+    - release-assets.githubusercontent.com
+    - github.com
+    - api.github.com
+    - "*.githubapp.com"
+    - "*.actions.githubusercontent.com"
+    - "*.blob.core.windows.net"
+    - "*.trafficmanager.net"
+    - nodejs.org
+    - "*.pnpm.io"
+
+  # Binary identity = (absolute path, parent interpreter). Paths under
+  # runner-provided tool caches are expected; anything else is a deviation.
+  executables:
+    - {path: "/usr/bin/*",           parent: "*"}
+    - {path: "/usr/local/bin/*",     parent: "*"}
+    - {path: "/opt/hostedtoolcache/node/*/bin/*",  parent: "*"}
+    - {path: "/opt/hostedtoolcache/pnpm/*/bin/*",  parent: "*"}
+    - {path: "/home/runner/.npm/**",               parent: "node"}
+    - {path: "/home/runner/work/**/node_modules/.bin/*", parent: "node"}
+
+  # Interpreter pivots observed on main. A pivot is (parent_interp, child_interp).
+  interpreter_pivots:
+    - [bash,  node]
+    - [node,  node]
+    - [node,  npm]
+    - [npm,   node]
+    - [node,  pnpm]
+    - [pnpm,  node]
+    - [bash,  curl]
+
+  # Directories where writes are expected during CI.
+  write_targets:
+    - /tmp/**
+    - /home/runner/work/**
+    - /home/runner/.npm/**
+    - /home/runner/.cache/**
+
+# ---------------------------------------------------------------------------
+# Assertions — runtime invariants evaluated against the baselines above
+# ---------------------------------------------------------------------------
 
 assertions:
-  # Shipped today — matches destinations against Garnet's managed threat feed.
+  # Shipped today. Matches destinations against Garnet's managed threat feed.
   - id: no_bad_egress_domain
     type: known_bad_egress
     severity: high
 
-  # Uses the same rule engine as known_bad_egress, but the "bad" list is
-  # "anything not in `allow:` above". Fails when a PR introduces an egress
-  # destination that the baseline on main has never reached.
+  # Set-diff over allow.egress. Fails when a PR introduces a destination the
+  # baseline on main has never reached. Uses the existing network policy
+  # rule engine; the "bad" list is "anything not in allow.egress".
   - id: no_unbaselined_egress
-    type: known_bad_egress     # same underlying check, different source list
-    source: policy.allow       # "fail if destination is NOT in policy.allow"
+    type: known_bad_egress
+    source: policy.allow.egress
     severity: high
-    # Fine-grained suppressions for intentional, temporary additions. A PR
-    # that adds a destination to `allow:` doesn't need a suppression — the
-    # allow change itself is the review signal.
-    suppress: []
+
+  # No baseline needed. Fires whenever a binary is executed from a path that
+  # was written to in the same run. This is the curl-pipe-bash signature and
+  # the single strongest invariant — SCA and SAST cannot see the join between
+  # "file was fetched" and "file was executed". Only an in-kernel sensor can.
+  - id: no_exec_from_writable_path
+    type: exec_from_writable_path
+    severity: critical
+
+  # Set-diff over allow.interpreter_pivots. Catches loader-stage malware that
+  # hides from language-level hooks by pivoting runtimes (node -> bun, pip
+  # install -> python -> bash). Language-level instrumentation dies at the
+  # runtime boundary; the kernel sees the execve regardless.
+  - id: no_unbaselined_interpreter_pivot
+    type: exec_ancestry_diff
+    source: policy.allow.interpreter_pivots
+    severity: high
+
+  # Hard-fail list; no baseline needed. Reads of credential-shaped paths by
+  # any process that isn't on a short allowlist (npm/pnpm/yarn for .npmrc,
+  # git for .git/config, etc.).
+  - id: no_sensitive_path_reads
+    type: sensitive_path_access
+    paths:
+      - "/proc/*/mem"
+      - "/proc/*/maps"
+      - "~/.aws/credentials"
+      - "~/.docker/config.json"
+      - "~/.ssh/id_*"
+      - "~/.npmrc"          # read-by-non-package-manager only
+      - ".git/config"
+      - "**/.env*"
+    severity: critical
+
+  # Set-diff over allow.write_targets. Catches droppers and persistence.
+  - id: no_unbaselined_write_target
+    type: fs_write_diff
+    source: policy.allow.write_targets
+    severity: medium
+
+# ---------------------------------------------------------------------------
+# Suppressions — one lane for every deviation kind.
+#
+# Keyed by the source location that introduced the new behavior. The learner
+# proposes suppressions as PRs against this block; humans review. A PR that
+# intentionally introduces new runtime behavior adds an entry here once, and
+# every assertion that fires on the same root cause is covered.
+# ---------------------------------------------------------------------------
+
+suppress: []
+# Example shape:
+# - key:     "tooling/perf/scripts/setup.js:17"
+#   assertions: [no_unbaselined_egress, no_exec_from_writable_path, no_unbaselined_interpreter_pivot]
+#   reason:  "Bun is an intentional perf-bench runtime; pinned + checksum verified"
+#   expires: 2026-10-01
