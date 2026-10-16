@@ -8,21 +8,12 @@ importers:
 
   .:
     dependencies:
-      '@opentelemetry/exporter-trace-otlp-http':
-        specifier: ^0.200.0
-        version: 0.200.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node':
         specifier: ^0.200.0
         version: 0.200.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/sdk-trace-node':
-        specifier: ^2.0.0
-        version: 2.0.0(@opentelemetry/api@1.9.0)
       '@posthog/ai':
         specifier: '*'
         version: 7.12.1(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-http@0.200.0(@opentelemetry/api@1.9.0))(@opentelemetry/exporter-trace-otlp-proto@0.200.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.0.0(@opentelemetry/api@1.9.0))(posthog-node@5.28.4)(ws@8.19.0)
-      posthog-node:
-        specifier: '*'
-        version: 5.28.4
     devDependencies:
       tsx:
         specifier: ^4.0.0
@@ -865,6 +856,7 @@ packages:
 
   uuid@10.0.0:
     resolution: {integrity: sha512-8XkAphELsDnEGrDxUOHB3RGvXz6TeuYSGEZBOjtTtPm2lwhGBjLgOzLHB63IUWfBpNucQjND6d3AOudO+H3RWQ==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   uuid@11.1.0:
