@@ -1,0 +1,9 @@
+{
+  "name": "@posthog-js/bundle-analyzer-local",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local per-module bundle analyzer used by the Bundle Report CI job. Not published.",
+  "scripts": {
+    "preinstall": "node scripts/install-analyzer.js"
+  }
+}

@@ -53,3 +53,7 @@ jobs:
         run: |
           set -e
           bash scripts/measure.sh | tee bundle-report.txt
+
+      - name: Per-module deep analysis
+        working-directory: tooling/bundle-report/analyzer
+        run: npm install --no-audit --no-fund
