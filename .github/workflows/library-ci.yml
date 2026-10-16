@@ -26,6 +26,9 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup
 
+      - name: Prepare package test fixture
+        run: node scripts/ci-test-fixture-prep.mjs
+
       - run: pnpm test:unit
 
       - name: Node edge runtime tests
