@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "@posthog/ai": "*",
-    "@opentelemetry/sdk-node": "^0.200.0"
+    "@opentelemetry/sdk-node": "^0.217.0"
   },
   "devDependencies": {
     "tsx": "^4.0.0",
