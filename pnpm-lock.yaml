@@ -1066,6 +1066,8 @@ importers:
         specifier: ^3.0.2
         version: 3.0.2
 
+  tooling/release-healthcheck: {}
+
   tooling/rollup-utils:
     dependencies:
       '@babel/core':

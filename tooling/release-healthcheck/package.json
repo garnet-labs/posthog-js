@@ -1,0 +1,9 @@
+{
+    "name": "@posthog-js/release-healthcheck",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Pre-publish sanity checks for the posthog-js release chain. Dry-run only.",
+    "scripts": {
+        "verify": "node verify.js"
+    }
+}
